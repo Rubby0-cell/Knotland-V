@@ -3,28 +3,25 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import { fileURLToPath } from "url";
 
-const rawPort = process.env.PORT;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
+const isDev = process.env.NODE_ENV !== "production";
+
+// Only require PORT in development (Vite dev server). Provide a default otherwise.
+const rawPort = process.env.PORT ?? (isDev ? "5173" : undefined);
+let port: number | undefined;
+if (rawPort !== undefined) {
+  const p = Number(rawPort);
+  if (Number.isNaN(p) || p <= 0) {
+    throw new Error(`Invalid PORT value: "${rawPort}"`);
+  }
+  port = p;
 }
 
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
-
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
-  throw new Error(
-    "BASE_PATH environment variable is required but was not provided.",
-  );
-}
+// Allow a sensible default for BASE_PATH in production; you can override with env var.
+const basePath = process.env.BASE_PATH ?? "/";
 
 export default defineConfig({
   base: basePath,
@@ -32,12 +29,13 @@ export default defineConfig({
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
+    // Use the Replit dev-only plugins only in dev when REPL_ID is set.
+    ...(isDev && process.env.REPL_ID !== undefined
       ? [
+          // top-level await is allowed in ESM Vite config; these imports are dev-only
           await import("@replit/vite-plugin-cartographer").then((m) =>
             m.cartographer({
-              root: path.resolve(import.meta.dirname, ".."),
+              root: path.resolve(__dirname, ".."),
             }),
           ),
           await import("@replit/vite-plugin-dev-banner").then((m) =>
@@ -48,19 +46,19 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "src"),
-      "@assets": path.resolve(import.meta.dirname, "..", "..", "attached_assets"),
+      "@": path.resolve(__dirname, "src"),
+      "@assets": path.resolve(__dirname, "..", "..", "attached_assets"),
     },
     dedupe: ["react", "react-dom"],
   },
-  root: path.resolve(import.meta.dirname),
+  root: path.resolve(__dirname),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
   },
   server: {
-    port,
-    strictPort: true,
+    // Only set port when defined (dev). For builds, Vite's build doesn't need server.port.
+    ...(port ? { port, strictPort: true } : {}),
     host: "0.0.0.0",
     allowedHosts: true,
     fs: {
@@ -68,7 +66,7 @@ export default defineConfig({
     },
   },
   preview: {
-    port,
+    ...(port ? { port } : {}),
     host: "0.0.0.0",
     allowedHosts: true,
   },
